@@ -18,10 +18,6 @@ spec:
         env:
         - name: PYTHONUNBUFFERED
           value: "1"
-        - name: AWS_ACCESS_KEY_ID
-          value: "LO706Y14ONG5GV2ODDL5"
-        - name: AWS_SECRET_ACCESS_KEY
-          value: "vl1ZdYNciDBJSs0eICuW5HZZLKV1hMVc4GMGDIdr"
         args: [
           "wandb login --relogin $(cat wandbcreds) && python ${FILE} --label=Age" 
         ]
