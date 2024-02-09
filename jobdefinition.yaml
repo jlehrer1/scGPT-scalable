@@ -1,0 +1,68 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: jl-${NAME}-age
+spec:
+  backoffLimit: 50
+  completions: 1
+  template:
+    metadata:
+      labels:
+        k8s-app: jl-${NAME}
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: jl-${NAME}
+        image: jmlehrer/${CONTAINER}:intersection
+        command: ["stdbuf", "-i0", "-o0", "-e0", "bash", "-c"]
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: AWS_ACCESS_KEY_ID
+          value: "LO706Y14ONG5GV2ODDL5"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "vl1ZdYNciDBJSs0eICuW5HZZLKV1hMVc4GMGDIdr"
+        args: [
+          "wandb login --relogin $(cat wandbcreds) && python ${FILE} --label=Age" 
+        ]
+        resources:
+          limits:
+            memory: 200Gi
+            cpu: "32"
+            nvidia.com/gpu: "1"
+          requests:
+            memory: 200Gi
+            cpu: "32"
+            nvidia.com/gpu: "1"
+        volumeMounts:
+        - name: ephemeral
+          mountPath: "/data"
+        # SystemV shared memory
+        - name: "dshm"
+          mountPath: "/dev/shm"
+      volumes:
+      # Ephemeral storage
+      - name: ephemeral
+        emptyDir: {}
+      - name: dshm
+        emptyDir:
+          medium: Memory
+      tolerations:
+        - key: "nautilus.io/chase-ci"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+      affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+              - matchExpressions:
+                # Host blacklist
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values:
+                    - k8s-chase-ci-04.calit2.optiputer.net
+                    - k8s-chase-ci-01.noc.ucsb.edu
+                    - k8s-chase-ci-02.calit2.optiputer.net
+                    - fiona8-1.calit2.uci.edu
+                    - k8s-chase-ci-06.calit2.optiputer.net

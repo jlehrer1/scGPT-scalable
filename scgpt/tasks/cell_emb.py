@@ -18,6 +18,35 @@ from ..utils import load_pretrained
 
 PathLike = Union[str, os.PathLike]
 
+class Dataset(torch.utils.data.Dataset):
+    def __init__(self, count_matrix, gene_ids, batch_ids=None, vocab=None, model_configs=None):
+        self.count_matrix = count_matrix
+        self.gene_ids = gene_ids
+        self.batch_ids = batch_ids
+        self.vocab = vocab
+        self.model_configs = model_configs
+
+    def __len__(self):
+        return len(self.count_matrix)
+
+    def __getitem__(self, idx):
+        row = self.count_matrix[idx]
+        nonzero_idx = np.nonzero(row)[0]
+        values = row[nonzero_idx]
+        genes = self.gene_ids[nonzero_idx]
+        # append <cls> token at the beginning
+        genes = np.insert(genes, 0, self.vocab["<cls>"])
+        values = np.insert(values, 0, self.model_configs["pad_value"])
+        genes = torch.from_numpy(genes).long()
+        values = torch.from_numpy(values).float()
+        output = {
+            "id": idx,
+            "genes": genes,
+            "expressions": values,
+        }
+        if self.batch_ids is not None:
+            output["batch_labels"] = self.batch_ids[idx]
+        return output
 
 def get_batch_cell_embeddings(
     adata,
@@ -61,37 +90,10 @@ def get_batch_cell_embeddings(
     if use_batch_labels:
         batch_ids = np.array(adata.obs["batch_id"].tolist())
 
-    class Dataset(torch.utils.data.Dataset):
-        def __init__(self, count_matrix, gene_ids, batch_ids=None):
-            self.count_matrix = count_matrix
-            self.gene_ids = gene_ids
-            self.batch_ids = batch_ids
-
-        def __len__(self):
-            return len(self.count_matrix)
-
-        def __getitem__(self, idx):
-            row = self.count_matrix[idx]
-            nonzero_idx = np.nonzero(row)[0]
-            values = row[nonzero_idx]
-            genes = self.gene_ids[nonzero_idx]
-            # append <cls> token at the beginning
-            genes = np.insert(genes, 0, vocab["<cls>"])
-            values = np.insert(values, 0, model_configs["pad_value"])
-            genes = torch.from_numpy(genes).long()
-            values = torch.from_numpy(values).float()
-            output = {
-                "id": idx,
-                "genes": genes,
-                "expressions": values,
-            }
-            if self.batch_ids is not None:
-                output["batch_labels"] = self.batch_ids[idx]
-            return output
 
     if cell_embedding_mode == "cls":
         dataset = Dataset(
-            count_matrix, gene_ids, batch_ids if use_batch_labels else None
+            count_matrix, gene_ids, batch_ids if use_batch_labels else None, vocab=vocab, model_configs=model_configs
         )
         collator = DataCollator(
             do_padding=True,
@@ -109,7 +111,7 @@ def get_batch_cell_embeddings(
             sampler=SequentialSampler(dataset),
             collate_fn=collator,
             drop_last=False,
-            num_workers=min(len(os.sched_getaffinity(0)), batch_size),
+            num_workers=min(os.cpu_count(), batch_size),
             pin_memory=True,
         )
 
